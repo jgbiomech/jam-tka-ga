@@ -13,7 +13,7 @@ useVisualizer=True
 knee_type = "TKA"
 subjectID = "DM"
 
-base_path        = "C:\\opensim-jam\\simulations"
+base_path        = "C:\\opensim-jam\\jam-tka-ga"
 # model_file       = "..\\jam-resources\\models\knee_healthy\\lenhart2015\\lenhart2015.osim"
 model_file       = "..\\jam-resources\\models\knee_"+knee_type+"\\grand_challenge\\"+subjectID+"\\"+subjectID+".osim"
 results_basename = "passive_flexion"

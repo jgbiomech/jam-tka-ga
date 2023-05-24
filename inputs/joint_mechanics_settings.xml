@@ -4,9 +4,9 @@
 		<!--Path to .osim file to use in analysis.-->
 		<model_file>..\jam-resources\models\knee_TKA\grand_challenge\DM\DM.osim</model_file>
 		<!--Path to storage file (.sto) containing the model states vs time for the simulation to be analyzed. This can contain coordinate (values and speed) muscle states.-->
-		<input_states_file>C:\opensim-jam\simulations\results\forsim\TKA\passive_flexion_states.sto</input_states_file>
+		<input_states_file>C:\opensim-jam\jam-tka-ga\results\forsim\TKA\passive_flexion_states.sto</input_states_file>
 		<!--Path to folder where the results files will be written.-->
-		<results_directory>C:\opensim-jam\simulations\results\joint-mechanics\TKA</results_directory>
+		<results_directory>C:\opensim-jam\jam-tka-ga\results\joint-mechanics\TKA</results_directory>
 		<!--Prefix to each results file name.-->
 		<results_file_basename>passive_flexion</results_file_basename>
 		<!--Time to start the analysis. Set to -1 to use initial frame in states_file. The default value is -1.-->

@@ -4,7 +4,7 @@
 		<!--Path to .osim model file to use in the forward simulation.-->
 		<model_file>..\jam-resources\models\knee_TKA\grand_challenge\DM\DM.osim</model_file>
 		<!--Path to folder where all results files will be written.-->
-		<results_directory>C:\opensim-jam\simulations\results\forsim\TKA</results_directory>
+		<results_directory>C:\opensim-jam\jam-tka-ga\results\forsim\TKA</results_directory>
 		<!--Prefix to each results file name.-->
 		<results_file_basename>passive_flexion</results_file_basename>
 		<!--Time to start simulation. Set to -1 to use initial frame in inputs files. The default value is 0.0.-->
@@ -18,7 +18,7 @@
 		<!--Paths to the Coordinates that will be unconstrained (unlocked and not prescribed) in the simulation. All Coordinates that are not listed here or in the prescribed_coordinates_file will be locked. Note coordinates listed here will override the 'locked' and 'prescribed' properties in the .osim file.-->
 		<unconstrained_coordinates>/jointset/knee_r/knee_add_r /jointset/knee_r/knee_rot_r /jointset/knee_r/knee_tx_r /jointset/knee_r/knee_ty_r /jointset/knee_r/knee_tz_r /jointset/pf_r/pf_flex_r /jointset/pf_r/pf_rot_r /jointset/pf_r/pf_tilt_r /jointset/pf_r/pf_tx_r /jointset/pf_r/pf_ty_r /jointset/pf_r/pf_tz_r</unconstrained_coordinates>
 		<!--Path to storage file (.sto) containing the time varying values of the Coordinates that will be prescribed in the forward simulation. The locked and prescribed properties in the model will be overriden for any Coordinates listed in this file. The columns labels must be formatted as 'time' and '/Path/To/Coordinate'-->
-		<prescribed_coordinates_file>C:\opensim-jam\simulations\inputs\prescribed_coordinates.sto</prescribed_coordinates_file>
+		<prescribed_coordinates_file>C:\opensim-jam\jam-tka-ga\inputs\prescribed_coordinates.sto</prescribed_coordinates_file>
 		<!--Use the SimTK visualizer to display the simulation. The default value is false.-->
 		<use_visualizer>true</use_visualizer>
 	</ForsimTool>
