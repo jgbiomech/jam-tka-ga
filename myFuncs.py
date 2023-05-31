@@ -80,3 +80,11 @@ def readOpenSimMotFile(filename): # https://gist.github.com/mitkof6/03c887ccc867
     file_id.close()
 
     return header, labels, data
+
+def readH5ContactData(h5file,contact_joint,contact_location,contact_variable):
+    data = h5file['model']['forceset']['Smith2018ArticularContactForce'][contact_joint+'_contact'][contact_location][contact_variable][()]
+    return data
+
+def readH5LigamentData(h5file,ligament,ligament_variable):
+    data = h5file['model']['forceset']['Blankevoort1991Ligament'][ligament][ligament_variable][()]
+    return data

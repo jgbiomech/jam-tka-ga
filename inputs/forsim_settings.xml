@@ -6,7 +6,7 @@
 		<!--Path to folder where all results files will be written.-->
 		<results_directory>C:\opensim-jam\jam-tka-ga\results\forsim\TKA</results_directory>
 		<!--Prefix to each results file name.-->
-		<results_file_basename>passive_flexion</results_file_basename>
+		<results_file_basename>settling</results_file_basename>
 		<!--Time to start simulation. Set to -1 to use initial frame in inputs files. The default value is 0.0.-->
 		<start_time>-1</start_time>
 		<!--Time to stop simulation. Set to -1 to use last frame in input files. The default value is 1.0.-->
