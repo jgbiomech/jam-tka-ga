@@ -3,3 +3,6 @@ ToDoList.txt
 *.h5
 __pycache__
 opensim.log
+*.vtp
+*.ply
+.vscode
