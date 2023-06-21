@@ -3,6 +3,7 @@ import opensim as osim
 import numpy as np
 # from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
+import multiprocessing
 
 # Import the necessary functions from myFuncs.py:
 # from myFuncs import ***
@@ -113,8 +114,7 @@ for ligID in ligIDs:
             osim.PropertyHelper.setValueDouble(slackOffset[idx]*slack_length,f.getPropertyByName('slack_length'))
             if print_slacks == 1:
                 print(f.getName()," - default slack = ",np.round(slack_length*1000,1)," mm - updated slack = ",np.round(slackOffset[idx]*slack_length*1000,1))
-            
-
+    
     # Print modified model:
     model_file = model_dir+"\\"+subjectID+"_"+ligID+".osim"
     myModel.printToXML(model_dir+"\\"+subjectID+"_"+ligID+".osim")
@@ -154,5 +154,5 @@ for ligID in ligIDs:
 
     print('Running JointMechanicsTool...')
     jnt_mech.run()
-
+    
     idx += 1
