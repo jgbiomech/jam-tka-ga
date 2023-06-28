@@ -35,7 +35,6 @@ forsim_settings_file   = inputs_dir+"\\forsim_settings.xml"
 jnt_mech_settings_file = inputs_dir+"\\joint_mechanics_settings.xml"
 
 ### Configure knee flexion:
-
 time_step       = 0.01
 settle_duration = 0.5
 flex_duration   = 2.0
@@ -62,7 +61,7 @@ labels.append("pelvis_tilt")
 prescribed_coord_table = osim.TimeSeriesTable(time, data_matrix, labels)
 
 sto = osim.STOFileAdapter()
-sto.write(prescribed_coord_table,prescribed_coord_file);
+sto.write(prescribed_coord_table,prescribed_coord_file)
 
 ### Perform Simulation with ForsimTool
 forsim = osim.ForsimTool()

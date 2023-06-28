@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<OpenSimDocument Version="40000">
+	<ForsimTool>
+		<!--Path to .osim model file to use in the forward simulation.-->
+		<model_file>..\jam-resources\models\knee_TKA\grand_challenge\DM\DM_forsim.osim</model_file>
+		<!--Path to folder where all results files will be written.-->
+		<results_directory>C:\opensim-jam\jam-tka-ga\results\forsim\TKA</results_directory>
+		<!--Prefix to each results file name.-->
+		<results_file_basename>Fcomp50</results_file_basename>
+		<!--Time to start simulation. Set to -1 to use initial frame in inputs files. The default value is 0.0.-->
+		<start_time>-1</start_time>
+		<!--Time to stop simulation. Set to -1 to use last frame in input files. The default value is 1.0.-->
+		<stop_time>-1</stop_time>
+		<!--Accuracy setting for BDF integrator. The Default value is 1e-6-->
+		<integrator_accuracy>0.001</integrator_accuracy>
+		<!--Constant value (between 0 and 1) input as control to all muscles not listed in the actuator_input_file. Set to -1 to ignore. Default is 0.01.-->
+		<constant_muscle_control>0.01</constant_muscle_control>
+		<!--Set whether activation dynamics should be used. If false, control (i.e. excitation) = activation.The default value is true.-->
+		<use_activation_dynamics>false</use_activation_dynamics>
+		<!--Set whether a compliant or rigid tendon is used in should be used in the contraction dynamics model. If false, the fiber length is removed as a state variableand simulation performance is improved.The default value is true.-->
+		<use_tendon_compliance>false</use_tendon_compliance>
+		<!--Set whether activation dynamics, muscle force-length-velocity and pennation properties should be used. If false, use_activation_dynamics and use_tendon_compliance are ignored and muscle-tendon force is calculated using: Force = activation * max_isometric_force(). The value should be false if analyzing COMAK results. The default value is true.-->
+		<use_muscle_physiology>false</use_muscle_physiology>
+		<!--Paths to the Coordinates that will be unconstrained (unlocked and not prescribed) in the simulation. All Coordinates that are not listed here or in the prescribed_coordinates_file will be locked. Note coordinates listed here will override the 'locked' and 'prescribed' properties in the .osim file.-->
+		<unconstrained_coordinates>/jointset/knee_r/knee_add_r /jointset/knee_r/knee_rot_r /jointset/knee_r/knee_tx_r /jointset/knee_r/knee_ty_r /jointset/knee_r/knee_tz_r /jointset/pf_r/pf_flex_r /jointset/pf_r/pf_rot_r /jointset/pf_r/pf_tilt_r /jointset/pf_r/pf_tx_r /jointset/pf_r/pf_ty_r /jointset/pf_r/pf_tz_r</unconstrained_coordinates>
+		<!--Path to .xml file that defines the ExternalLoads to apply to the model during the simulation.-->
+		<external_loads_file>C:\opensim-jam\jam-tka-ga\inputs\external_loads.xml</external_loads_file>
+		<!--Path to storage file (.sto) containing the time varying values of the Coordinates that will be prescribed in the forward simulation. The locked and prescribed properties in the model will be overriden for any Coordinates listed in this file. The columns labels must be formatted as 'time' and '/Path/To/Coordinate'-->
+		<prescribed_coordinates_file>C:\opensim-jam\jam-tka-ga\inputs\prescribed_coordinates.sto</prescribed_coordinates_file>
+		<!--Use the SimTK visualizer to display the simulation. The default value is false.-->
+		<use_visualizer>true</use_visualizer>
+	</ForsimTool>
+</OpenSimDocument>

@@ -1,113 +1,166 @@
+# TO DO:
+# Pose model with ForSim output states
+# Fix XML config of external_loads.xml
+# Configure Latin HyperCube of ligament slack lengths/reference strains
+# TBD
+
 import os
+import time
 import opensim as osim
 import numpy as np
+import multiprocessing as mp
+# from bs4 import BeautifulSoup as bs 
+import xml.etree.ElementTree as ET
 # from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
+
+nPool = mp.cpu_count()-1
 
 # Import the necessary functions from myFuncs.py:
-from myFuncs import run_settle_sim
+from myFuncs import run_settle_sim, configure_knee_flex
 
 osim.Logger.setLevelString("info")
 useVisualizer=False
 
 ### Configure inputs:
-sim_acc = 1e-3
-
-ligIDs          = ["Nominal","minOffset","maxOffset"]
-# ligID           = "Nominal"
-slackOffsets    = [1,0.95,1.05]
-# slackOffset     = 1
-print_slacks    = 0
+F_comp          = 50
+sim_accuracy    = 1e-3
 knee_type       = "TKA"
 subjectID       = "DM"
 base_path       = "C:\\opensim-jam\\jam-tka-ga"
 inputs_dir      = base_path+"\\inputs"
 results_dir     = base_path+"\\results"
-settling_dir    =  results_dir+"\\settling\\"+knee_type
+settling_dir    = results_dir+"\\settling\\"+knee_type
+forsim_dir      = results_dir+"\\forsim\\"+knee_type
 model_dir       = "..\\jam-resources\\models\knee_"+knee_type+"\\grand_challenge\\"+subjectID
-base_model_file = model_dir+"\\"+subjectID+".osim"
 
+# Configure files:
+base_model_file            = model_dir+"\\"+subjectID+".osim"
+prescribed_coord_file      = inputs_dir+"\\prescribed_coordinates.sto"
+external_loads_config_file = inputs_dir+"\\external_loads.xml"
+external_loads_file        = inputs_dir+"\\external_loads.sto"
+ 
 ### Configure folders:
 os.makedirs(inputs_dir, exist_ok=True)
 os.makedirs(results_dir, exist_ok=True)
 os.makedirs(settling_dir, exist_ok=True)
+os.makedirs(forsim_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 
-### Configure the generic COMAKInverseKinematicsTool settings:
-IKtool = osim.COMAKInverseKinematicsTool()
-IKtool.set_results_directory(settling_dir)
-IKtool.set_perform_secondary_constraint_sim(True)
-IKtool.set_secondary_constraint_sim_integrator_accuracy(sim_acc)
-IKtool.set_secondary_constraint_sim_internal_step_limit(10000)
-IKtool.set_print_secondary_constraint_sim_results(True)
-IKtool.set_secondary_constraint_sim_settle_threshold(1e-4)
-IKtool.set_secondary_coupled_coordinate('/jointset/knee_r/knee_flex_r')
-IKtool.set_secondary_coordinates(0,'/jointset/knee_r/knee_add_r')
-IKtool.set_secondary_coordinates(1,'/jointset/knee_r/knee_rot_r')
-IKtool.set_secondary_coordinates(2,'/jointset/knee_r/knee_tx_r')
-IKtool.set_secondary_coordinates(3,'/jointset/knee_r/knee_ty_r')
-IKtool.set_secondary_coordinates(4,'/jointset/knee_r/knee_tz_r')
-IKtool.set_secondary_coordinates(5,'/jointset/pf_r/pf_flex_r')
-IKtool.set_secondary_coordinates(6,'/jointset/pf_r/pf_rot_r')
-IKtool.set_secondary_coordinates(7,'/jointset/pf_r/pf_tilt_r')
-IKtool.set_secondary_coordinates(8,'/jointset/pf_r/pf_tx_r')
-IKtool.set_secondary_coordinates(9,'/jointset/pf_r/pf_ty_r')
-IKtool.set_secondary_coordinates(10,'/jointset/pf_r/pf_tz_r')
-IKtool.set_secondary_coupled_coordinate_start_value(0)
-IKtool.set_secondary_coupled_coordinate_stop_value(0)
-IKtool.set_secondary_constraint_sim_sweep_time(0)
-IKtool.set_perform_inverse_kinematics(False)
-IKtool.set_use_visualizer(useVisualizer)
-# Placeholder settings:
-IKtool.set_secondary_constraint_function_file('Unassigned')
-IKtool.set_constraint_function_num_interpolation_points
-IKtool.set_coordinate_file('Unassigned')
-IKtool.set_marker_file("..\\jam-resources\\models\knee_"+knee_type+"\\grand_challenge\\"+subjectID+"\\"+subjectID+"_markers.xml")
-IKtool.set_output_motion_file('Unassigned')
-IKtool.set_ik_accuracy(1e-5)
-IKtool.set_ik_constraint_weight(0)
-IKtool.set_time_range(0,0)
-IKtool.set_time_range(1,0)
-IKtool.set_report_errors(False)
-IKtool.set_report_marker_locations(False)
-IKtool.set_constrained_model_file('Unassigned')
+### Configure ligament input parameters:
+ligIDs          = ["Nominal","minOffset_1","minOffset_2","maxOffset_1","maxOffset_2"]
+slackOffsets    = [1,0.95,0.975,1.025,1.05]
 
-### Configure the generic JointMechanicsTool settings:
-JMtool = osim.JointMechanicsTool()
-JMtool.set_results_directory(settling_dir)
-JMtool.set_start_time(-1)
-JMtool.set_stop_time(-1)
-JMtool.set_normalize_to_cycle(False)
-JMtool.set_contacts(0,'all')
-JMtool.set_ligaments(0,'all')
-JMtool.set_muscles(0,'none')
-JMtool.set_muscle_outputs(0,'none')
-JMtool.set_attached_geometry_bodies(0,'/bodyset/femur_r')
-JMtool.set_attached_geometry_bodies(1,'/bodyset/tibia_r')
-JMtool.set_attached_geometry_bodies(2,'/bodyset/patella_r')
-JMtool.set_output_orientation_frame('ground')
-JMtool.set_output_position_frame('ground')
-JMtool.set_write_vtp_files(False)
-JMtool.set_write_h5_file(True)
-JMtool.set_h5_kinematics_data(True)
-JMtool.set_h5_states_data(True)
-JMtool.set_use_visualizer(useVisualizer)
+### Configure flexion profile for ForSim:
+time_step       = 0.01
+settle_duration = 1
+flex_duration   = 0
+max_knee_flex   = 0
 
-for ii in range(len(slackOffsets)):
-    ligID = ligIDs[ii]
-    slackOffset = slackOffsets[ii]
-    run_settle_sim(ligID,slackOffset,IKtool,JMtool,subjectID,base_model_file,model_dir,inputs_dir,settling_dir)
+smooth_knee_flex,sim_time,nTimeSteps = configure_knee_flex(time_step,settle_duration,flex_duration,max_knee_flex)
 
+data_matrix = osim.Matrix.createFromMat(smooth_knee_flex) # convert to OpenSim matrix format
+
+labels = osim.StdVectorString()
+labels.append("knee_flex_r")
+
+prescribed_coord_table = osim.TimeSeriesTable(sim_time, data_matrix, labels)
+
+sto = osim.STOFileAdapter()
+sto.write(prescribed_coord_table,prescribed_coord_file)
+
+### Configure the applied loads:
+
+# Loads file:
+loads_table      = np.zeros([len(sim_time),9])
+F_comp_sim       = F_comp*np.ones(len(sim_time))
+loads_table[:,1] = F_comp_sim
+data_matrix      = osim.Matrix.createFromMat(loads_table) # convert to OpenSim matrix format
+
+labels = osim.StdVectorString()
+labels.append("tibia_r_force_vx")
+labels.append("tibia_r_force_vy")
+labels.append("tibia_r_force_vz")
+labels.append("tibia_r_force_px")
+labels.append("tibia_r_force_py")
+labels.append("tibia_r_force_pz")
+labels.append("tibia_r_torque_x")
+labels.append("tibia_r_torque_y")
+labels.append("tibia_r_torque_z")
+
+external_loads_table = osim.TimeSeriesTable(sim_time, data_matrix, labels)
+sto.write(external_loads_table,external_loads_file)
+
+# # Config file:
+# tree = ET.parse(external_loads_config_file)
+# root = tree.getroot()
+
+### Configure forsim-specific model:
+myModel = osim.Model(base_model_file)
+
+myModel.set_gravity(osim.Vec3([0,0,0])) # disable gravity
+
+ForceSet     = myModel.getForceSet()
+ForceSetSize = ForceSet.getSize()
+for ii in range(0,ForceSetSize-1):
+    f = ForceSet.get(ii)
+    if f.getConcreteClassName() == 'Blankevoort1991Ligament':
+        f.set_appliesForce(False)
+    if f.getConcreteClassName() == 'Millard2012EquilibriumMuscle':
+        f.set_appliesForce(False)
+
+# Print modified model:
+forsim_model_file = model_dir+"\\"+subjectID+"_forsim.osim"
+myModel.printToXML(forsim_model_file)
+
+### Configure ForsimTool Settings:
+forsim_basename      = "Fcomp"+str(F_comp)
+forsim_settings_file = inputs_dir+"\\forsim_settings_"+forsim_basename+".xml"
+
+# ForsimTool:
+forsim = osim.ForsimTool()
+forsim.set_model_file(forsim_model_file)
+forsim.set_results_directory(forsim_dir)
+forsim.set_results_file_basename(forsim_basename)
+forsim.set_start_time(-1)
+forsim.set_stop_time(-1)
+forsim.set_integrator_accuracy(sim_accuracy) # Note this should be 1e-6 for research
+forsim.set_constant_muscle_control(0.01) # Set all muscles to 2% activation to represent passive state
+forsim.set_use_activation_dynamics(False)
+forsim.set_use_muscle_physiology(False)
+forsim.set_use_tendon_compliance(False)
+forsim.set_unconstrained_coordinates(0,'/jointset/knee_r/knee_add_r')
+forsim.set_unconstrained_coordinates(1,'/jointset/knee_r/knee_rot_r')
+forsim.set_unconstrained_coordinates(2,'/jointset/knee_r/knee_tx_r')
+forsim.set_unconstrained_coordinates(3,'/jointset/knee_r/knee_ty_r')
+forsim.set_unconstrained_coordinates(4,'/jointset/knee_r/knee_tz_r')
+forsim.set_unconstrained_coordinates(5,'/jointset/pf_r/pf_flex_r')
+forsim.set_unconstrained_coordinates(6,'/jointset/pf_r/pf_rot_r')
+forsim.set_unconstrained_coordinates(7,'/jointset/pf_r/pf_tilt_r')
+forsim.set_unconstrained_coordinates(8,'/jointset/pf_r/pf_tx_r')
+forsim.set_unconstrained_coordinates(9,'/jointset/pf_r/pf_ty_r')
+forsim.set_unconstrained_coordinates(10,'/jointset/pf_r/pf_tz_r')
+forsim.set_external_loads_file(external_loads_config_file)
+forsim.set_prescribed_coordinates_file(prescribed_coord_file)
+forsim.set_use_visualizer(True)
+forsim.printToXML(forsim_settings_file)
+
+### Run ForSim to get initial position after tibial compression:
+print('Running Forsim Tool...')
+forsim.run()
+
+### Run settling simulations in parallel
 if __name__ == '__main__':
-    pool = Pool(processes=4)
+    pool = mp.Pool(processes=nPool)   
     for ii in range(len(slackOffsets)):
         ligID = ligIDs[ii]
         slackOffset = slackOffsets[ii]
-        pool.apply_async(run_settle_sim,args=(ligID,slackOffset,IKtool,JMtool,subjectID,base_model_file,model_dir,inputs_dir,settling_dir))
-        print(ii)
+        pool.apply_async(run_settle_sim,args=(ligID,slackOffset,subjectID,base_model_file,knee_type,model_dir,inputs_dir,settling_dir,useVisualizer,sim_accuracy))
     pool.close()
     pool.join()
 
 
-    
+# for ii in range(len(slackOffsets)):
+#     ligID = ligIDs[ii]
+#     slackOffset = slackOffsets[ii]
+#     t = run_settle_sim(ligID,slackOffset,subjectID,base_model_file,model_dir,inputs_dir,settling_dir)
