@@ -28,6 +28,12 @@ def configure_knee_flex(time_step,settle_duration,flex_duration,max_knee_flex):
 
     return smooth_knee_flex,time,nTimeSteps
 
+def splitnonalpha(s):
+   pos = 1
+   while pos < len(s) and s[pos].isalpha():
+      pos+=1
+   return (s[:pos], s[pos:])
+
 def readOpenSimMotFile(filename): # https://gist.github.com/mitkof6/03c887ccc867e1c8976694459a34edc3
     """ Reads OpenSim .sto files.
     Parameters
@@ -91,22 +97,52 @@ def readH5LigamentData(h5file,ligament,ligament_variable):
     data = h5file['model']['forceset']['Blankevoort1991Ligament'][ligament][ligament_variable][()]
     return data
 
-def run_settle_sim(ligID,slackOffset,subjectID,base_model_file,knee_type,model_dir,inputs_dir,settling_dir,useVisualizer,sim_accuracy):
+def run_settle_sim(ligID,refStrain,refStrainNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy):
     start_time = time.time()
+
+    joint    = 'knee'
+    limb     = 'r'
+    tf_coordIDs = ['flex','add','rot','tx','ty','tz']
+    tf_coordIDs = [joint+'_' + coordID for coordID in tf_coordIDs]
+
+    # Folder config: 
+    settling_dir = results_dir+"\\settling\\"+knee_type
+    forsim_dir   = results_dir+"\\forsim\\"+knee_type
+    os.makedirs(settling_dir, exist_ok=True)
 
     # Simulation-specific output filename:    
     results_basename = "settling_"+ligID 
 
-    # Modify the input OpenSim model:    
+    # Import OpenSim model:    
     myModel = osim.Model(base_model_file)
+    state = myModel.initSystem()
 
+    # Import ForSim data:
+    header,forsim_labels,forsim_data = readOpenSimMotFile(forsim_dir+'\\'+forsim_basename+'_states.sto')
+
+    # Extract knee joint state & pose model::
+    for coordID in tf_coordIDs:
+        idx  = forsim_labels.index("/jointset/"+joint+"_"+limb+"/"+coordID+"_"+limb+"/value")
+        myModel.getCoordinateSet().get(coordID+'_'+limb).setValue(state,forsim_data[-1,idx])
+
+    # Update ligament slack lengths:
     ForceSet     = myModel.getForceSet()
     ForceSetSize = ForceSet.getSize()
     for ii in range(0,ForceSetSize-1):
         f = ForceSet.get(ii)
         if f.getConcreteClassName() == 'Blankevoort1991Ligament':
-            slack_length = float(f.getPropertyByName('slack_length').toString())
-            osim.PropertyHelper.setValueDouble(slackOffset*slack_length,f.getPropertyByName('slack_length'))
+            ligFiberName = f.getName()
+            
+            slack_length_default = float(f.getPropertyByName('slack_length').toString()) # Default slack length
+            # print(ligFiberName+' default slack length: '+str(slack_length_default))
+
+            refStrainLig = refStrain[refStrainNames.index(splitnonalpha(ligFiberName)[0])] # Find the ligament bundle reference strain
+                     
+            lig_length = float(f.getOutput('length').getValueAsString(state)) # Updated slack length
+            slack_length_updated = lig_length/(refStrainLig + 1)
+            # print(f.getName()+' updated slack length: '+str(slack_length_updated))
+
+            osim.PropertyHelper.setValueDouble(slack_length_updated,f.getPropertyByName('slack_length'))
     
     # Print modified model:
     model_file = model_dir+"\\"+subjectID+"_"+ligID+".osim"
