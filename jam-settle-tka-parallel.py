@@ -11,7 +11,7 @@ import numpy as np
 import multiprocessing as mp
 # from bs4 import BeautifulSoup as bs 
 import xml.etree.ElementTree as ET
-# from scipy.interpolate import CubicSpline
+from scipy.stats import qmc
 import matplotlib.pyplot as plt
 
 nPool = mp.cpu_count()-1
@@ -22,7 +22,10 @@ from myFuncs import run_settle_sim, configure_knee_flex
 osim.Logger.setLevelString("info")
 useVisualizer=False
 
-run_forsim = 0
+run_forsim_init = 0
+reset_LHdesign  = 1
+run_debug       = 0
+run_parallel    = 1
 
 ### Configure inputs:
 F_comp          = 50
@@ -51,14 +54,38 @@ os.makedirs(forsim_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 
 ### Configure ligament input parameters:
-ligIDs           = ["Nominal","minCI","maxCI"]
-refStrainNames   = ['MCLd','MCLs','pMC','LCL','PFL','pCAP','ITB','PT','mPFL','lPFL','PCLpm','PCLal']
+LigBundleNames   = ['MCLd','MCLs','pMC','LCL','PFL','pCAP','ITB','PT','mPFL','lPFL','PCLpm','PCLal']
+
+# Reference strains:
 refStrainNominal = [0.03,0.03,0.05,0.06,-0.01,0.08,0.02,0.02,-0.05,0.01,-0.06,0.01]
 refStrainMinCI   = [-0.01,-0.01,0.01,0.02,-0.05,0.04,-0.02,-0.02,-0.09,-0.03,-0.10,-0.03]
 refStrainMaxCI   = [0.07,0.07,0.09,0.10,0.03,0.12,0.06,0.06,-0.01,0.05,-0.02,0.04]
-refStrains       = [refStrainNominal,refStrainMinCI,refStrainMaxCI]
 
-if run_forsim == 1:
+# Stiffness:
+StiffNominal = [2800/10,2200/20,2000/10,1800/10,3000/10,4000/8,4000,14700/30,1000/15,800/15,2400/10,5700//10]
+StiffMinCI   = [1120/10,880/20,800/10,720/10,1200/10,1600/8,1600,5880/30,400/15,320/15,960/10,2280/10]
+StiffMaxCI   = [4480/10,3520/20,3200/10,2880/10,4800/10,6400/8,6400,23520/30,1600/15,1280/15,3840/10,9120/10]
+
+NominalValues = np.concatenate((refStrainNominal,StiffNominal),axis=0)
+minCIValues   =  np.concatenate((refStrainMinCI,StiffMinCI),axis=0)
+maxCIValues   = np.concatenate((refStrainMaxCI,StiffMaxCI),axis=0)
+
+### Configure the LHS of the ligament input parameters:
+LHS_factor = 1
+if reset_LHdesign == 1:
+    LH_sampler = qmc.LatinHypercube(d=len(NominalValues))
+    LH_sample  = LH_sampler.random(len(NominalValues)*LHS_factor)
+    LH_data    = qmc.scale(LH_sample,minCIValues,maxCIValues)
+    LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
+    np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
+else:
+    LH_data= np.loadtxt(settling_dir+'\\LH_design.txt')
+
+simConfigs = ['Nominal']
+for ii in range(1,len(LH_data)+1):
+    simConfigs.append('LHS'+str(ii))
+
+if run_forsim_init == 1:
 
     ### Configure flexion profile for ForSim:
     time_step       = 0.01
@@ -157,22 +184,20 @@ if run_forsim == 1:
     print('Running Forsim Tool...')
     forsim.run()
 
-# ligID     = ligIDs[0]
-# refStrain = refStrainNominal
-# run_settle_sim(ligID,refStrain,refStrainNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy)
+if run_debug == 1:
+    simConfig = simConfigs[1]
+    refStrain = LH_data[1,0:len(refStrainNominal)]
+    Stiffness = LH_data[1,len(refStrainNominal):2*len(StiffNominal)]
+    run_settle_sim(simConfig,refStrain,Stiffness,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy)
 
 ### Run settling simulations in parallel
 if __name__ == '__main__':
     pool = mp.Pool(processes=nPool)   
-    for ii in range(len(ligIDs)):
-        ligID = ligIDs[ii]
-        refStrain = refStrains[ii]
-        pool.apply_async(run_settle_sim,args=(ligID,refStrain,refStrainNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
+    for ii in range(len(simConfigs)-1):
+        print(ii)
+        simConfig = simConfigs[ii]
+        refStrainData = LH_data[ii,0:len(refStrainNominal)]
+        StiffnessData = LH_data[ii,len(refStrainNominal):2*len(StiffNominal)]
+        pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
     pool.close()
     pool.join()
-
-
-# for ii in range(len(slackOffsets)):
-#     ligID = ligIDs[ii]
-#     slackOffset = slackOffsets[ii]
-#     t = run_settle_sim(ligID,slackOffset,subjectID,base_model_file,model_dir,inputs_dir,settling_dir)

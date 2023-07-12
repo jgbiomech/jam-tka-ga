@@ -97,7 +97,7 @@ def readH5LigamentData(h5file,ligament,ligament_variable):
     data = h5file['model']['forceset']['Blankevoort1991Ligament'][ligament][ligament_variable][()]
     return data
 
-def run_settle_sim(ligID,refStrain,refStrainNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy):
+def run_settle_sim(ligID,refStrain,Stiffness,refStrainNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy):
     start_time = time.time()
 
     joint    = 'knee'
@@ -133,15 +133,17 @@ def run_settle_sim(ligID,refStrain,refStrainNames,forsim_basename,subjectID,base
         if f.getConcreteClassName() == 'Blankevoort1991Ligament':
             ligFiberName = f.getName()
             
-            slack_length_default = float(f.getPropertyByName('slack_length').toString()) # Default slack length
+            # stiffness_default    = float(f.getPropertyByName('linear_stiffness').toString())
+            # slack_length_default = float(f.getPropertyByName('slack_length').toString()) # Default slack length
             # print(ligFiberName+' default slack length: '+str(slack_length_default))
 
-            refStrainLig = refStrain[refStrainNames.index(splitnonalpha(ligFiberName)[0])] # Find the ligament bundle reference strain
+            lig_ref_strain     = refStrain[refStrainNames.index(splitnonalpha(ligFiberName)[0])] # Find the ligament bundle reference strain
+            lig_stiff_udpated = Stiffness[refStrainNames.index(splitnonalpha(ligFiberName)[0])]
                      
             lig_length = float(f.getOutput('length').getValueAsString(state)) # Updated slack length
-            slack_length_updated = lig_length/(refStrainLig + 1)
-            # print(f.getName()+' updated slack length: '+str(slack_length_updated))
+            slack_length_updated = lig_length/(lig_ref_strain + 1)
 
+            osim.PropertyHelper.setValueDouble(lig_stiff_udpated,f.getPropertyByName('linear_stiffness'))
             osim.PropertyHelper.setValueDouble(slack_length_updated,f.getPropertyByName('slack_length'))
     
     # Print modified model:
