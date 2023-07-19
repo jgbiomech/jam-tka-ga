@@ -1,7 +1,5 @@
 # TO DO:
-# Pose model with ForSim output states
 # Fix XML config of external_loads.xml
-# Configure Latin HyperCube of ligament slack lengths/reference strains
 # TBD
 
 import os
@@ -14,7 +12,7 @@ import xml.etree.ElementTree as ET
 from scipy.stats import qmc
 import matplotlib.pyplot as plt
 
-nPool = mp.cpu_count()-1
+nPool = 10 #mp.cpu_count()-1
 
 # Import the necessary functions from myFuncs.py:
 from myFuncs import run_settle_sim, configure_knee_flex
@@ -23,9 +21,10 @@ osim.Logger.setLevelString("info")
 useVisualizer=False
 
 run_forsim_init = 0
-reset_LHdesign  = 1
+reset_LHdesign  = 0
 run_debug       = 0
 run_parallel    = 1
+plot_demo       = 0
 
 ### Configure inputs:
 F_comp          = 50
@@ -71,7 +70,7 @@ minCIValues   =  np.concatenate((refStrainMinCI,StiffMinCI),axis=0)
 maxCIValues   = np.concatenate((refStrainMaxCI,StiffMaxCI),axis=0)
 
 ### Configure the LHS of the ligament input parameters:
-LHS_factor = 1
+LHS_factor = 10
 if reset_LHdesign == 1:
     LH_sampler = qmc.LatinHypercube(d=len(NominalValues))
     LH_sample  = LH_sampler.random(len(NominalValues)*LHS_factor)
@@ -79,7 +78,17 @@ if reset_LHdesign == 1:
     LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
     np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
 else:
-    LH_data= np.loadtxt(settling_dir+'\\LH_design.txt')
+    LH_data = np.loadtxt(settling_dir+'\\LH_design.txt')
+
+if plot_demo == 1:
+    fig_demo = plt.figure(figsize=(4,4))
+    plt.title('Latin Hypercube space-filling design example')
+    plt.scatter(100*LH_data[:,0],100*LH_data[:,1],color='black')
+    plt.xlabel('MCLs reference strain (%)')
+    plt.ylim((-1,7))
+    plt.ylabel('MCLd reference strain (%)')
+    plt.xlim((-1,7))
+    plt.savefig(base_path+"\\overview\\LHS-example.png",dpi=150)
 
 simConfigs = ['Nominal']
 for ii in range(1,len(LH_data)+1):
@@ -185,9 +194,10 @@ if run_forsim_init == 1:
     forsim.run()
 
 if run_debug == 1:
-    simConfig = simConfigs[1]
-    refStrain = LH_data[1,0:len(refStrainNominal)]
-    Stiffness = LH_data[1,len(refStrainNominal):2*len(StiffNominal)]
+    idx = 17
+    simConfig = simConfigs[idx]
+    refStrain = LH_data[idx,0:len(refStrainNominal)]
+    Stiffness = LH_data[idx,len(refStrainNominal):2*len(StiffNominal)]
     run_settle_sim(simConfig,refStrain,Stiffness,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy)
 
 ### Run settling simulations in parallel
@@ -195,7 +205,7 @@ if __name__ == '__main__':
     pool = mp.Pool(processes=nPool)   
     for ii in range(len(simConfigs)-1):
         print(ii)
-        simConfig = simConfigs[ii]
+        simConfig     = simConfigs[ii]
         refStrainData = LH_data[ii,0:len(refStrainNominal)]
         StiffnessData = LH_data[ii,len(refStrainNominal):2*len(StiffNominal)]
         pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))

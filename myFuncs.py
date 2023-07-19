@@ -89,9 +89,18 @@ def readOpenSimMotFile(filename): # https://gist.github.com/mitkof6/03c887ccc867
 
     return header, labels, data
 
-def readH5ContactData(h5file,contact_joint,contact_location,contact_variable):
-    data = h5file['model']['forceset']['Smith2018ArticularContactForce'][contact_joint+'_contact'][contact_location][contact_variable][()]
-    return data
+def readH5ContactData(h5file,contact_joint,contact_location,contact_variable,dims):
+
+    if len(dims) == 0:
+        data = h5file['model']['forceset']['Smith2018ArticularContactForce'][contact_joint+'_contact'][contact_location][contact_variable][()]
+        return data
+    elif len(dims) == 2: # for the tibiofemoral joint: region 4 = +z, region 5 = -z. For right knee: +z = lateral compartment and -z = medial compartment
+        data_pos = h5file['model']['forceset']['Smith2018ArticularContactForce'][contact_joint+'_contact'][contact_location][contact_variable][str(dims[0])][()]
+        data_neg = h5file['model']['forceset']['Smith2018ArticularContactForce'][contact_joint+'_contact'][contact_location][contact_variable][str(dims[1])][()]
+        return data_pos,data_neg
+    else:
+        raise ValueError('Incorrect number of dimensions')
+
 
 def readH5LigamentData(h5file,ligament,ligament_variable):
     data = h5file['model']['forceset']['Blankevoort1991Ligament'][ligament][ligament_variable][()]

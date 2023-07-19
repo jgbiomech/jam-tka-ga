@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<OpenSimDocument Version="40000">
+	<JointMechanicsTool>
+		<!--Path to .osim file to use in analysis.-->
+		<model_file>..\jam-resources\models\knee_TKA\grand_challenge\DM\DM_LHS22.osim</model_file>
+		<!--Path to storage file (.sto) containing the model states vs time for the simulation to be analyzed. This can contain coordinate (values and speed) muscle states.-->
+		<input_states_file>C:\opensim-jam\jam-tka-ga\results\settling\TKA\settling_LHS22_states.sto</input_states_file>
+		<!--Prefix to each results file name.-->
+		<results_file_basename>settling_LHS22</results_file_basename>
+	</JointMechanicsTool>
+</OpenSimDocument>
