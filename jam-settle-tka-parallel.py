@@ -1,6 +1,7 @@
 # TO DO:
 # Fix XML config of external_loads.xml
-# TBD
+# GA code after initial LH sampling
+#   - Process LH sampling 
 
 import os
 import time
