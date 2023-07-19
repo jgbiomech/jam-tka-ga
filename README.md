@@ -12,6 +12,7 @@ Here, each of the 12 ligament bundles is assigned a reference strain and a stiff
 To fill the space, $24 \times 10 = 240$ permutations were generated.
 
 Below is an example of the sampled reference strains for the deep and superficial MCL ligament. Each dot represents 1 of the 240 permuations:
+
 ![Example of the LH space-filling design samples for the MCLs and MCLd](overview/LHS-example.png)
 
 The knee was then settled into equilibrium at full extension for each permutation.
