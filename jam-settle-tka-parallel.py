@@ -18,7 +18,7 @@ import h5py
 nPool = 12 #mp.cpu_count()-1
 
 # Import the necessary functions from myFuncs.py:
-from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData
+from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData, Member
 
 osim.Logger.setLevelString("info")
 useVisualizer=False
@@ -238,9 +238,7 @@ if __name__ == '__main__':
         pool.join()
 
     # Process simulation data --> Find joint contact forces & objective function:
-    JCFlat = []
-    JCFmed = []
-    JCFobj = []
+    Pop = []
     for ii in range(len(simConfigs)):
         
         if ii == 0:
@@ -248,23 +246,16 @@ if __name__ == '__main__':
         else:
             results_basename = "settling_LHS"+str(ii)
 
-        h5file     = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
-        JCFl,JCFm  = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
+        h5file    = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
+        JCFl,JCFm = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
 
-        JCFm_r = np.linalg.norm(JCFm[-1,:])
-        JCFl_r = np.linalg.norm(JCFl[-1,:])
+        mem = Member()
+        mem.JCFmed = np.linalg.norm(JCFm[-1,:])
+        mem.JCFlat = np.linalg.norm(JCFl[-1,:])
+        mem.JCFobj = np.power(np.linalg.norm(JCFm[-1,:])-np.linalg.norm(JCFl[-1,:]),4)
+        Pop.append(mem)
 
-        if ii == 0:
-             JCFmed_nom = JCFm_r
-             JCFlat_nom = JCFl_r
-        else:
-            JCFobj = np.append(JCFobj,np.power(JCFm_r-JCFl_r,4))
-            JCFmed = np.append(JCFmed,JCFm_r)
-            JCFlat = np.append(JCFlat,JCFl_r)
-
-    # Create DataFrame with joint contact force & objective funciton data:
-    df = pd.DataFrame(data={'JCFmed':JCFobj,'JCFmed':JCFmed,'JCFlat':JCFlat})
-
+    t=2
     # Append RefStrain data to DataFrame:
 
 
