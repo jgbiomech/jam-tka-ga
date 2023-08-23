@@ -255,7 +255,7 @@ if __name__ == '__main__':
         mem.JCFobj = np.power(np.linalg.norm(JCFm[-1,:])-np.linalg.norm(JCFl[-1,:]),4)
         Pop.append(mem)
 
-    t=2
+    t=21
     # Append RefStrain data to DataFrame:
 
 

@@ -4,6 +4,12 @@ import os
 import time
 import opensim as osim
 
+class Member():
+    def __init__(self):
+        self.JCFmed = []
+        self.JCFlat = []
+        self.JCFobj = []
+
 def configure_knee_flex(time_step,settle_duration,flex_duration,max_knee_flex):
 
     # Simulation consists of two phases:
