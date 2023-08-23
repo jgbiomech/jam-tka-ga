@@ -1,8 +1,10 @@
 ToDoList.txt
 **/[Uu]nassigned*
 *.h5
+*.sto
 __pycache__
 opensim.log
 *.vtp
 *.ply
 .vscode
+inputs

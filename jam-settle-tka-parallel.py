@@ -7,38 +7,46 @@ import os
 import time
 import opensim as osim
 import numpy as np
+import pandas as pd 
 import multiprocessing as mp
 # from bs4 import BeautifulSoup as bs 
 import xml.etree.ElementTree as ET
 from scipy.stats import qmc
 import matplotlib.pyplot as plt
+import h5py
 
-nPool = 10 #mp.cpu_count()-1
+nPool = 12 #mp.cpu_count()-1
 
 # Import the necessary functions from myFuncs.py:
-from myFuncs import run_settle_sim, configure_knee_flex
+from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData
 
 osim.Logger.setLevelString("info")
 useVisualizer=False
 
 run_forsim_init = 0
-reset_LHdesign  = 0
+reset_LHdesign  = 1
 run_debug       = 0
-run_parallel    = 1
-plot_demo       = 0
+run_parallel    = 0
+plot_demo       = 1
 
 ### Configure inputs:
-F_comp          = 50
-sim_accuracy    = 1e-3
-knee_type       = "TKA"
-subjectID       = "DM"
-base_path       = "C:\\opensim-jam\\jam-tka-ga"
-inputs_dir      = base_path+"\\inputs"
-results_dir     = base_path+"\\results"
-settling_dir    = results_dir+"\\settling\\"+knee_type
-forsim_dir      = results_dir+"\\forsim\\"+knee_type
-model_dir       = "..\\jam-resources\\models\knee_"+knee_type+"\\grand_challenge\\"+subjectID
-forsim_basename = "Fcomp"+str(F_comp)
+F_comp           = 50
+sim_accuracy     = 1e-3
+knee_type        = "TKA"
+contact_location = "tibia_implant"
+joint            = "knee"
+subjectID        = "DM"
+base_path        = "C:\\opensim-jam\\jam-tka-ga"
+inputs_dir       = base_path+"\\inputs"
+results_dir      = base_path+"\\results"
+settling_dir     = results_dir+"\\settling\\"+knee_type
+forsim_dir       = results_dir+"\\forsim\\"+knee_type
+model_dir        = "..\\jam-resources\\models\knee_"+knee_type+"\\grand_challenge\\"+subjectID
+forsim_basename  = "Fcomp"+str(F_comp)
+
+### Configure the Member data structure:
+MemberConfig = np.zeros(1,dtype = [('var',float)])
+MemberConfig[0]['var'] = 3
 
 # Configure files:
 base_model_file            = model_dir+"\\"+subjectID+".osim"
@@ -71,13 +79,13 @@ minCIValues   =  np.concatenate((refStrainMinCI,StiffMinCI),axis=0)
 maxCIValues   = np.concatenate((refStrainMaxCI,StiffMaxCI),axis=0)
 
 ### Configure the LHS of the ligament input parameters:
-LHS_factor = 10
+LHS_factor = 2
 if reset_LHdesign == 1:
     LH_sampler = qmc.LatinHypercube(d=len(NominalValues))
     LH_sample  = LH_sampler.random(len(NominalValues)*LHS_factor)
     LH_data    = qmc.scale(LH_sample,minCIValues,maxCIValues)
-    LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
-    np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
+    # LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
+    # np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
 else:
     LH_data = np.loadtxt(settling_dir+'\\LH_design.txt')
 
@@ -203,12 +211,74 @@ if run_debug == 1:
 
 ### Run settling simulations in parallel
 if __name__ == '__main__':
-    pool = mp.Pool(processes=nPool)   
-    for ii in range(len(simConfigs)-1):
-        print(ii)
-        simConfig     = simConfigs[ii]
-        refStrainData = LH_data[ii,0:len(refStrainNominal)]
-        StiffnessData = LH_data[ii,len(refStrainNominal):2*len(StiffNominal)]
-        pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
-    pool.close()
-    pool.join()
+
+    # Iterate through generations:
+
+    # Create Population:
+        # If Iteration 1: Population = NewPopulation, and the strain values are determined by the initial Latin Hypercube (size = 2*nMembers)
+        # If Iteration >1: Create NewPopulation using data from previous generation (Iteration-1)
+            # Iterate through each pair of children:
+                # Binary tournament --> find best parents
+                # Crossover (if sufficient probability, otherwise inherit erefs from parent)
+                # Mutate children
+                # Check for limit in parents number of children/repetition and if conditions are not met 
+                    # Create Population members (nMembers), decrease loop counter
+
+    # Run settling simulations in parallel for NewPopulation (nMembers):
+    if run_parallel == 1:
+        pool = mp.Pool(processes=nPool)   
+        # Update for Iteration >1
+        for ii in range(len(simConfigs)-1):
+            print(ii)
+            simConfig     = simConfigs[ii]  
+            refStrainData = LH_data[ii,0:len(refStrainNominal)] 
+            StiffnessData = LH_data[ii,len(refStrainNominal):2*len(StiffNominal)] 
+            pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
+        pool.close()
+        pool.join()
+
+    # Process simulation data --> Find joint contact forces & objective function:
+    JCFlat = []
+    JCFmed = []
+    JCFobj = []
+    for ii in range(len(simConfigs)):
+        
+        if ii == 0:
+            results_basename = "settling_Nominal"
+        else:
+            results_basename = "settling_LHS"+str(ii)
+
+        h5file     = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
+        JCFl,JCFm  = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
+
+        JCFm_r = np.linalg.norm(JCFm[-1,:])
+        JCFl_r = np.linalg.norm(JCFl[-1,:])
+
+        if ii == 0:
+             JCFmed_nom = JCFm_r
+             JCFlat_nom = JCFl_r
+        else:
+            JCFobj = np.append(JCFobj,np.power(JCFm_r-JCFl_r,4))
+            JCFmed = np.append(JCFmed,JCFm_r)
+            JCFlat = np.append(JCFlat,JCFl_r)
+
+    # Create DataFrame with joint contact force & objective funciton data:
+    df = pd.DataFrame(data={'JCFmed':JCFobj,'JCFmed':JCFmed,'JCFlat':JCFlat})
+
+    # Append RefStrain data to DataFrame:
+
+
+
+                    
+
+
+        
+
+    # Evaluate and sort:
+    #    NDSort (non-dominated sort to rank the members in the population)
+
+    # Reset child count
+
+    # Evaluate GA performance
+        # Terminate if conditions are met
+    
