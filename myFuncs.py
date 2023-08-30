@@ -4,12 +4,6 @@ import os
 import time
 import opensim as osim
 
-class Member():
-    def __init__(self):
-        self.JCFmed = []
-        self.JCFlat = []
-        self.JCFobj = []
-
 def configure_knee_flex(time_step,settle_duration,flex_duration,max_knee_flex):
 
     # Simulation consists of two phases:
@@ -262,3 +256,63 @@ def run_settle_sim(ligID,refStrain,Stiffness,refStrainNames,forsim_basename,subj
     print('Running JointMechanicsTool...')
     JMtool.run()
     return (time.time()-start_time)
+
+def NDsort(Pop,nObj,nMembers,crVal):
+
+    domMat = np.zeros(shape=(len(Pop),len(Pop)))
+    for p in range(len(Pop)):
+        for q in range(len(Pop)):
+            if Pop[p].nViol == 0 and Pop[q].nViol == 0:
+                domMat[p,q] = np.sum(np.sum((Pop[q].Obj-Pop[p].Obj)>0) == nObj)
+            elif Pop[p].nViol == 0:
+                domMat[p,q] = 1
+            elif Pop[q].nViol == 0:
+                domMat[q,p] = 1
+            else:
+                if Pop[p].violSum<Pop[q].violSum:
+                    domMat[p,q] = 1
+                elif Pop[q].violSum<Pop[p].violSum:
+                    domMat[q,p] = 1
+
+    domCount = np.sum(domMat,axis=0)
+    frUnq,frIdx,frInv = np.unique(domCount,return_index=True,return_inverse=True)
+
+    frIdx = np.linspace(0,len(frUnq),len(frUnq)+1)
+    rank = frIdx[frInv]
+
+    # Calculate crowding distance:
+    crDist = np.zeros(shape=(len(Pop),1)) # Greater distance == better performance
+    for ii in range(0,len(frIdx)):
+
+        idx = [zz for zz, x in enumerate(rank==ii) if x] # Determine members of a given rank
+        
+        c = 0
+        valores = np.zeros(shape=(len(idx),2))
+        for jj in idx:                               
+            valores[c] = Pop[jj].Obj
+            c += 1
+        orden = np.argsort(valores,axis=0) # Sort memebers along 1st direction
+        crowding = crVal*np.ones(shape=(valores.shape[0],valores.shape[1])) # Assign a large value for extreme solutions of each pareto front --> least crowded
+
+        if len(valores)>2: # Calculate crowding distance for the non-extreme members of a pareto front
+            for jj in range(0,nObj):
+                crowding[orden[1:len(orden)-1,jj],jj]  = (valores[orden[2:len(orden),jj],jj]-valores[orden[0:len(orden)-2,jj],jj])/(np.max(valores[:,jj])-np.min(valores[:,jj]))
+
+        c = 0 # Assign crowding distance to each member
+        for jj in idx:                
+            crDist[jj] = np.sum(crowding[c,:])
+            c += 1
+
+    # Subselect best members: 
+    rankDist = np.column_stack((np.reshape(rank,(len(rank),1)),crDist))
+
+    idx = np.lexsort((-rankDist[:,1],rankDist[:,0])) # Sort first by the rank and then the descending crowding distance (i.e., more distance == better)
+
+    SelPop = []
+    for ii in range(0,nMembers):
+        mem = Pop[idx[ii]]
+        mem.rank = int(rank[idx[ii]])
+        mem.dist = crDist[idx[ii]]
+        SelPop.append(mem)
+    
+    return (SelPop)

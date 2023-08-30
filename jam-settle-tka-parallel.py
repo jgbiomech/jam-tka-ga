@@ -16,9 +16,10 @@ import matplotlib.pyplot as plt
 import h5py
 
 nPool = 12 #mp.cpu_count()-1
+LHS_factor = 2
 
 # Import the necessary functions from myFuncs.py:
-from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData, Member
+from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData, NDsort
 
 osim.Logger.setLevelString("info")
 useVisualizer=False
@@ -45,8 +46,19 @@ model_dir        = "..\\jam-resources\\models\knee_"+knee_type+"\\grand_challeng
 forsim_basename  = "Fcomp"+str(F_comp)
 
 ### Configure the Member data structure:
-MemberConfig = np.zeros(1,dtype = [('var',float)])
-MemberConfig[0]['var'] = 3
+class Member():
+    def __init__(self):
+        self.name    = []
+        self.JCFmed  = []
+        self.JCFlat  = []
+        self.Obj     = []
+        self.eref    = []
+        self.stiff   = []        
+        self.nViol   = 0
+        self.violSum = 0
+        self.rank    = 0
+        self.dist    = 0
+        self.nChild  = 0
 
 # Configure files:
 base_model_file            = model_dir+"\\"+subjectID+".osim"
@@ -75,11 +87,10 @@ StiffMinCI   = [1120/10,880/20,800/10,720/10,1200/10,1600/8,1600,5880/30,400/15,
 StiffMaxCI   = [4480/10,3520/20,3200/10,2880/10,4800/10,6400/8,6400,23520/30,1600/15,1280/15,3840/10,9120/10]
 
 NominalValues = np.concatenate((refStrainNominal,StiffNominal),axis=0)
-minCIValues   =  np.concatenate((refStrainMinCI,StiffMinCI),axis=0)
+minCIValues   = np.concatenate((refStrainMinCI,StiffMinCI),axis=0)
 maxCIValues   = np.concatenate((refStrainMaxCI,StiffMaxCI),axis=0)
 
 ### Configure the LHS of the ligament input parameters:
-LHS_factor = 2
 if reset_LHdesign == 1:
     LH_sampler = qmc.LatinHypercube(d=len(NominalValues))
     LH_sample  = LH_sampler.random(len(NominalValues)*LHS_factor)
@@ -88,6 +99,13 @@ if reset_LHdesign == 1:
     # np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
 else:
     LH_data = np.loadtxt(settling_dir+'\\LH_design.txt')
+
+### Optimisation inputs:
+
+nMembers = int(len(LH_data)/2) # Total members of a current population
+nGen = 1
+nObj = 2 # Number of objective functions --> currently just 1: (JCFm - JCFl)^4
+crVal = 1e5
 
 if plot_demo == 1:
     fig_demo = plt.figure(figsize=(4,4))
@@ -99,8 +117,8 @@ if plot_demo == 1:
     plt.xlim((-1,7))
     plt.savefig(base_path+"\\overview\\LHS-example.png",dpi=150)
 
-simConfigs = ['Nominal']
-for ii in range(1,len(LH_data)+1):
+simConfigs = ['Nominal'] # Bake the nominal configuration into the initial simulations (i.e., remove the last LH sample)
+for ii in range(1,len(LH_data)):
     simConfigs.append('LHS'+str(ii))
 
 if run_forsim_init == 1:
@@ -224,52 +242,71 @@ if __name__ == '__main__':
                 # Check for limit in parents number of children/repetition and if conditions are not met 
                     # Create Population members (nMembers), decrease loop counter
 
-    # Run settling simulations in parallel for NewPopulation (nMembers):
-    if run_parallel == 1:
-        pool = mp.Pool(processes=nPool)   
-        # Update for Iteration >1
-        for ii in range(len(simConfigs)-1):
-            print(ii)
-            simConfig     = simConfigs[ii]  
-            refStrainData = LH_data[ii,0:len(refStrainNominal)] 
-            StiffnessData = LH_data[ii,len(refStrainNominal):2*len(StiffNominal)] 
-            pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
-        pool.close()
-        pool.join()
+    for Gen in range(0,nGen):
 
-    # Process simulation data --> Find joint contact forces & objective function:
-    Pop = []
-    for ii in range(len(simConfigs)):
-        
-        if ii == 0:
-            results_basename = "settling_Nominal"
+        if Gen == 0: # First generation
+            
+            # Create the population:
+            NewPop = []
+            for ii in range(0,len(simConfigs)):
+                mem = Member()
+                if ii == 0:
+                    mem.eref  = np.array(refStrainNominal)
+                    mem.stiff = np.array(StiffNominal)
+                else:
+                    mem.eref  = LH_data[ii-1,0:len(refStrainNominal)]
+                    mem.stiff = LH_data[ii-1,len(refStrainNominal):2*len(StiffNominal)] 
+                mem.name = simConfigs[ii]
+                NewPop.append(mem)
+
         else:
-            results_basename = "settling_LHS"+str(ii)
+            NewPop = []
+  
+        # Run settling simulations in parallel for NewPopulation (nMembers):
+        if run_parallel == 1:
+            pool = mp.Pool(processes=nPool)   
+            # Update for Iteration >1
+            for ii in range(len(NewPop)):
+                print(ii)
+                simConfig     = NewPop[ii].name 
+                refStrainData = NewPop[ii].eref 
+                StiffnessData = NewPop[ii].stiff 
+                pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
+            pool.close()
+            pool.join()
 
-        h5file    = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
-        JCFl,JCFm = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
+        # Process simulation data --> Extract joint contact forces & determine objective function:
+        for ii in range(len(NewPop)):            
+            if ii == 0:
+                results_basename = "settling_Nominal"
+            else:
+                results_basename = "settling_LHS"+str(ii)
 
-        mem = Member()
-        mem.JCFmed = np.linalg.norm(JCFm[-1,:])
-        mem.JCFlat = np.linalg.norm(JCFl[-1,:])
-        mem.JCFobj = np.power(np.linalg.norm(JCFm[-1,:])-np.linalg.norm(JCFl[-1,:]),4)
-        Pop.append(mem)
+            h5file    = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
+            JCFl,JCFm = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
 
-    t=21
-    # Append RefStrain data to DataFrame:
+            if ii == 0 and Gen == 0: # Find nominal joint contact forces
+                JCFnet_nom = np.linalg.norm(JCFm[-1,:]) + np.linalg.norm(JCFl[-1,:])
 
+            JCFmed = np.linalg.norm(JCFm[-1,:])
+            JCFlat = np.linalg.norm(JCFl[-1,:])
+            JCFnet = JCFmed + JCFlat
 
+            NewPop[ii].JCFmed = JCFmed
+            NewPop[ii].JCFlat = JCFlat
+            NewPop[ii].Obj    = np.array((np.power((JCFmed-JCFlat),4),np.power((JCFnet-JCFnet_nom),4)))
 
-                    
+        if Gen == 0:
+            Pop = NewPop # len(Pop) = 2*nMembers
+        else:
+            Pop = [] # len(Pop) = 2*nMembers
 
+        # Non-dominated sort to rank the best nMembers in the population:
+        Pop = NDsort(Pop,nObj,nMembers,crVal) # len(Pop) = nMembers
 
-        
+        # Reset child count
+        t = []
 
-    # Evaluate and sort:
-    #    NDSort (non-dominated sort to rank the members in the population)
-
-    # Reset child count
-
-    # Evaluate GA performance
-        # Terminate if conditions are met
+        # Evaluate GA performance
+            # Terminate if conditions are met
     
