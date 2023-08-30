@@ -316,3 +316,55 @@ def NDsort(Pop,nObj,nMembers,crVal):
         SelPop.append(mem)
     
     return (SelPop)
+
+def BinTour(Pop):
+
+    p1 = 0
+    p2 = 0
+    while p1 == 0 or p2 == 0:
+
+        tmnt = np.random.randint(0,len(Pop),size=[2,2])
+
+        p = np.zeros(shape=2)
+        for jj in range(0,2):
+            p[jj] = tmnt[0,jj]
+            if Pop[tmnt[0,jj]].rank > Pop[tmnt[1,jj]].rank or (Pop[tmnt[0,jj]].rank == Pop[tmnt[1,jj]].rank and Pop[tmnt[0,jj]].dist < Pop[tmnt[1,jj]].dist):
+                p[jj] = tmnt[1,jj]
+        
+        if p[0] != p[1]:
+            p1 = int(p[0])
+            p2 = int(p[1])
+
+    return(p1,p2)
+
+def SBX(var,nC):
+                
+    nInd = var.shape[1]
+    b = np.zeros(shape=nInd)
+    for jj in range(0,nInd):
+        u = np.random.uniform(0,1)
+        b[jj] = np.power((2*u),(1/(nC+1)))
+        if u > 0.5:
+            b[jj] = np.power(2*(1-u),(-1/(nC+1)))
+
+    sbx = np.tile(np.mean(var,axis=0),(2,1))
+    sbx = sbx + 0.5*np.row_stack((b,-b))*(np.max(var,axis=0)-np.min(var,axis=0))   
+
+    return(sbx)
+
+def MutateChildren(var,pM,nM,minCIValues,maxCIValues):
+
+    for ii in range(0,len(var)):
+        u = np.random.uniform(0,1)
+        if u <= pM:
+            if u <= 0.5:
+                d = np.power((2*u),(1/(nM+1)))-1
+                var[ii] = var[ii] + d*(var[ii] - minCIValues[ii])
+            else:
+                d = 1-np.power(2*(1-u),(1/(nM+1)))
+                var[ii] = var[ii] + d*(maxCIValues[ii] - var[ii])
+    
+    var = np.maximum(var,minCIValues)
+    var = np.minimum(var,maxCIValues)
+
+    return(var)
