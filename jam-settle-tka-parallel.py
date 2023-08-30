@@ -19,15 +19,17 @@ nPool = 12 #mp.cpu_count()-1
 LHS_factor = 2
 
 # Import the necessary functions from myFuncs.py:
-from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData, NDsort
+from myFuncs import run_settle_sim, configure_knee_flex, readH5ContactData, NDsort, BinTour, SBX, MutateChildren
 
 osim.Logger.setLevelString("info")
 useVisualizer=False
 
+reset_LHdesign  = 0
+run_init_gen    = 1
+run_parallel    = 1
+
 run_forsim_init = 0
-reset_LHdesign  = 1
 run_debug       = 0
-run_parallel    = 0
 plot_demo       = 1
 
 ### Configure inputs:
@@ -95,17 +97,21 @@ if reset_LHdesign == 1:
     LH_sampler = qmc.LatinHypercube(d=len(NominalValues))
     LH_sample  = LH_sampler.random(len(NominalValues)*LHS_factor)
     LH_data    = qmc.scale(LH_sample,minCIValues,maxCIValues)
-    # LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
-    # np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
+    LH_data    = np.insert(LH_data,0,NominalValues,axis=0) # Add nominal data
+    np.savetxt(settling_dir+'\\LH_design.txt',LH_data)
 else:
     LH_data = np.loadtxt(settling_dir+'\\LH_design.txt')
 
 ### Optimisation inputs:
-
 nMembers = int(len(LH_data)/2) # Total members of a current population
-nGen = 1
+nGen = 2
 nObj = 2 # Number of objective functions --> currently just 1: (JCFm - JCFl)^4
 crVal = 1e5
+pC    = 0.9
+pM    = 0.1
+nC    = 2 # Crossover factor
+nM    = 50
+nChildMax = 3
 
 if plot_demo == 1:
     fig_demo = plt.figure(figsize=(4,4))
@@ -231,22 +237,11 @@ if run_debug == 1:
 if __name__ == '__main__':
 
     # Iterate through generations:
-
-    # Create Population:
-        # If Iteration 1: Population = NewPopulation, and the strain values are determined by the initial Latin Hypercube (size = 2*nMembers)
-        # If Iteration >1: Create NewPopulation using data from previous generation (Iteration-1)
-            # Iterate through each pair of children:
-                # Binary tournament --> find best parents
-                # Crossover (if sufficient probability, otherwise inherit erefs from parent)
-                # Mutate children
-                # Check for limit in parents number of children/repetition and if conditions are not met 
-                    # Create Population members (nMembers), decrease loop counter
-
     for Gen in range(0,nGen):
 
         if Gen == 0: # First generation
             
-            # Create the population:
+            # Create NewPop of the first generation from the LH sample:
             NewPop = []
             for ii in range(0,len(simConfigs)):
                 mem = Member()
@@ -259,13 +254,69 @@ if __name__ == '__main__':
                 mem.name = simConfigs[ii]
                 NewPop.append(mem)
 
-        else:
+        else: # Subsequent generations
+            
+            # Create NewPop using the genetic algorithm:
             NewPop = []
-  
+            SelectedParents = np.zeros(shape=(nMembers,2),dtype=np.uint8)
+            idx_child = 0
+            ii = nMembers
+            var_old = np.zeros(shape=(len(Pop),2*len(Pop[0].eref)))
+            cnt = 0
+            while ii != 0:
+
+                cnt += 1
+
+                p1,p2 = BinTour(Pop) # Find the candidate parents of the child using a Binary tournament
+
+                p1_var = np.concatenate((Pop[p1].eref,Pop[p1].stiff),axis=0)
+                p2_var = np.concatenate((Pop[p2].eref,Pop[p2].stiff),axis=0)
+                var    = np.row_stack((np.reshape(p1_var,(1,len(p1_var))),np.reshape(p2_var,(1,len(p2_var)))))
+
+                # Crossover:            
+                if np.random.uniform(0,1) < pC: # Only if sufficient probability, otherwise inherit vars from parent
+                    var = SBX(var,nC)
+
+                var_order = np.random.permutation(2) # Randomise the order of the children
+                for idx in var_order:
+                    
+                    # Mutation:                    
+                    var[idx,:] = MutateChildren(var[idx,:],pM,nM,minCIValues,maxCIValues)
+                    
+                    # Check for limit in parents number of children:
+                    if ii > 0 and Pop[p1].nChild < nChildMax and Pop[p2].nChild < nChildMax:
+
+                        if ii == nMembers: # Collate the var data for the current population
+                            for jj in range(0,len(Pop)):
+                                var_old[jj,:] = np.concatenate((Pop[jj].eref,Pop[jj].stiff))
+                        
+                        var_check = np.zeros(shape=(len(Pop))) 
+                        for jj in range(0,len(Pop)):
+                            var_check[jj] = np.isin(var[idx,:],var_old[jj,:]).sum()
+                        
+                        # Check for any repetition --> if none, create child:
+                        if ~np.any(var_check==var[idx,:].shape[0]): 
+
+                            mem = Member()
+                            mem.name  = 'Gen'+str(Gen)+'_Child'+str(idx_child)
+                            mem.eref  = var[idx,0:int(nMembers/2)]
+                            mem.stiff = var[idx,int(nMembers/2):nMembers+1]
+                            NewPop.append(mem)
+
+                            # Increase child count of parent:
+                            Pop[p1].nChild = Pop[p1].nChild + 1
+                            Pop[p2].nChild = Pop[p2].nChild + 1
+
+                            # Debug:
+                            SelectedParents[idx_child] = [p1,p2]
+
+                            # Update counters:
+                            ii -= 1
+                            idx_child += 1
+
         # Run settling simulations in parallel for NewPopulation (nMembers):
-        if run_parallel == 1:
+        if run_parallel == 1 and (Gen>0 or run_init_gen == 1):
             pool = mp.Pool(processes=nPool)   
-            # Update for Iteration >1
             for ii in range(len(NewPop)):
                 print(ii)
                 simConfig     = NewPop[ii].name 
@@ -275,12 +326,18 @@ if __name__ == '__main__':
             pool.close()
             pool.join()
 
+            # Add check for any missing simulations:
+            # TBA
+
         # Process simulation data --> Extract joint contact forces & determine objective function:
         for ii in range(len(NewPop)):            
             if ii == 0:
                 results_basename = "settling_Nominal"
             else:
-                results_basename = "settling_LHS"+str(ii)
+                if Gen == 0: 
+                    results_basename = "settling_LHS"+str(ii)
+                else:
+                    results_basename = "settling_"+NewPop[ii].name
 
             h5file    = h5py.File(settling_dir+'\\'+results_basename+'.h5','r')
             JCFl,JCFm = readH5ContactData(h5file,joint,contact_location,'regional_contact_force',[4,5])
@@ -304,8 +361,12 @@ if __name__ == '__main__':
         # Non-dominated sort to rank the best nMembers in the population:
         Pop = NDsort(Pop,nObj,nMembers,crVal) # len(Pop) = nMembers
 
-        # Reset child count
-        t = []
+        # Reset child count of current gener
+        for ii in range(0,len(Pop)):
+            Pop[ii].nChild = 0
+
+        if Gen == 1:
+            t = []
 
         # Evaluate GA performance
             # Terminate if conditions are met
