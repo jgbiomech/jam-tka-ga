@@ -15,7 +15,7 @@ from scipy.stats import qmc
 import matplotlib.pyplot as plt
 import h5py
 
-nPool = 12 #mp.cpu_count()-1
+nPool = int(mp.cpu_count()/2)
 LHS_factor = 2
 
 # Import the necessary functions from myFuncs.py:
@@ -25,8 +25,8 @@ osim.Logger.setLevelString("info")
 useVisualizer=False
 
 reset_LHdesign  = 0
-run_init_gen    = 1
-run_parallel    = 1
+run_init_gen    = 0
+run_parallel    = 1#1
 
 run_forsim_init = 0
 run_debug       = 0
@@ -105,7 +105,7 @@ else:
 ### Optimisation inputs:
 nMembers = int(len(LH_data)/2) # Total members of a current population
 nGen = 2
-nObj = 2 # Number of objective functions --> currently just 1: (JCFm - JCFl)^4
+nObj = 2 # Number of objective functions
 crVal = 1e5
 pC    = 0.9
 pM    = 0.1
@@ -327,7 +327,31 @@ if __name__ == '__main__':
             pool.join()
 
             # Add check for any missing simulations:
-            # TBA
+            idxMissing = [1] # Initialise
+            while len(idxMissing) != 0:
+                idxMissing = [] # Reset
+                for ii in range(len(NewPop)):            
+                    if Gen == 0: 
+                        if ii == 0:
+                            results_basename = "settling_Nominal"
+                        else:
+                            results_basename = "settling_LHS"+str(ii)
+                    else:
+                        results_basename = "settling_"+NewPop[ii].name
+
+                    fileID = settling_dir+'\\'+results_basename
+                    if os.path.exists(fileID+'.h5') is False or os.path.exists(fileID+'_states.sto') is False:
+                        idxMissing.append(ii)
+                
+                if len(idxMissing) != 0: # Run missing simulations
+                    pool = mp.Pool(processes=nPool)   
+                    for idx in idxMissing:
+                        simConfig     = NewPop[idx].name 
+                        refStrainData = NewPop[idx].eref 
+                        StiffnessData = NewPop[idx].stiff 
+                        pool.apply_async(run_settle_sim,args=(simConfig,refStrainData,StiffnessData,LigBundleNames,forsim_basename,subjectID,base_model_file,knee_type,model_dir,inputs_dir,results_dir,useVisualizer,sim_accuracy))
+                    pool.close()
+                    pool.join()
 
         # Process simulation data --> Extract joint contact forces & determine objective function:
         for ii in range(len(NewPop)):            
@@ -354,9 +378,10 @@ if __name__ == '__main__':
             NewPop[ii].Obj    = np.array((np.power((JCFmed-JCFlat),4),np.power((JCFnet-JCFnet_nom),4)))
 
         if Gen == 0:
-            Pop = NewPop # len(Pop) = 2*nMembers
+            Pop = NewPop # len(Pop) = 2*nMembers + 1
         else:
-            Pop = [] # len(Pop) = 2*nMembers
+            for ii in range(nMembers):
+                Pop.append(NewPop[ii]) # len(Pop) = 2*nMembers
 
         # Non-dominated sort to rank the best nMembers in the population:
         Pop = NDsort(Pop,nObj,nMembers,crVal) # len(Pop) = nMembers
