@@ -5,7 +5,7 @@ import opensim as osim
 
 import sys
 # Are we running this script as a test? Users can ignore this line!
-# Test update
+# Test update  2
 running_as_test = 'unittest' in str().join(sys.argv)
 
 # Define global model where the arm lives.
